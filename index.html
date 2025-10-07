@@ -1,0 +1,306 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>📱Узнай  телефон📱</title>
+
+<!-- TFJS + TeachableMachine -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@0.8.4/dist/teachablemachine-image.min.js"></script>
+
+<style>
+  :root{
+    --accent:#E31E24;
+    --bg:#f7f7f9;
+    --text:#1a1a1a;
+    --muted:#6b7280;
+    --card:#ffffff;
+    --bar:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+  }
+
+  /* ====== Шапка ====== */
+  header{
+    background:#fff; color:#fff; padding:28px 0;
+    margin-bottom:18px;
+  }
+  header .container{
+    max-width:1200px; margin:0 auto; padding:0 16px;
+    display:flex; align-items:center; gap:16px
+  }
+  header img{
+    height:clamp(90px, 10vw, 160px);
+    width:auto; display:block;
+  }
+  header h1{margin:0; font-weight:800; letter-spacing:.02em; line-height:1.1}
+  header h1 small{display:block; color:#FF5733; font-weight:600; font-size:16px}
+  
+  /* Фиолетовый цвет для заголовка "Узнай персонажа" */
+  header h1 .main-title{
+    color: #736ee3; /* Фиолетовый цвет */
+  }
+
+  /* ====== Контент ====== */
+  .container{max-width:1200px; margin:0 auto; padding:24px 16px 48px}
+  .grid{display:grid; grid-template-columns:360px 1fr; gap:22px}
+  .card{
+    background:var(--card); border-radius:14px; box-shadow:0 6px 24px rgba(0,0,0,.08);
+    padding:18px; overflow:hidden;    /* <-- ничего не вылезет за границы */
+  }
+  .card h3{margin:0 0 12px; font-size:18px}
+  .muted{color:var(--muted)}
+
+  .btn{
+    display:inline-flex; align-items:center; gap:8px;
+    background:var(--accent); color:#fff; border:0;
+    padding:10px 14px; border-radius:10px; cursor:pointer;
+    font-weight:700; letter-spacing:.02em;
+    transition: background-color 0.3s ease;
+    font-family: inherit; /* Наследует шрифт от body */
+    font-size: 16px; /* Явно задаем размер шрифта */
+  }
+  /* Голубой цвет для кнопки "Запустить камеру" */
+  .btn.camera{
+    background: #0ac2e0; /* Голубой цвет */
+  }
+  .btn.camera:hover{
+    background: #1C86EE; /* Темнее при наведении */
+  }
+  .btn.secondary{
+    background:#111;
+    font-weight:700; /* Такой же жирный шрифт как у кнопки камеры */
+    letter-spacing:.02em; /* Такой же межбуквенный интервал */
+  }
+  .btn:disabled{opacity:.6; cursor:not-allowed}
+
+  .controls{display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px}
+  input[type="file"]{display:inline-block}
+
+  #preview, #cam canvas{
+    width:100%; height:360px; object-fit:contain; background:#000;
+    border-radius:12px;
+  }
+  #cam canvas{display:block}
+
+  /* ====== Блок порога в рамке ====== */
+  .hint-box{
+    margin-top:12px;
+    background:#f8fafc;
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    padding:12px 14px;
+  }
+  .hint-box .row{
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .hint-box .label{min-width:140px; font-weight:700}
+  .hint-box input[type="range"]{width:200px}
+  .hint-box small{display:block; margin-top:8px; color:var(--muted); line-height:1.35}
+  .hint-box b{color:#111}
+
+  /* ====== Вердикт и вероятности ====== */
+  .verdict{
+    margin:8px 0 14px; padding:10px 12px; border-radius:12px;
+    background:#f8fafc; border:1px dashed #e5e7eb;
+  }
+  .verdict b{color:#111}
+  .verdict .other{color:#ef4444}
+
+  .row-prob{display:flex; align-items:center; gap:10px; margin:6px 0}
+  .row-prob .label{width:120px; font-weight:600}
+  .row-prob .bar{position:relative; flex:1; height:16px; background:var(--bar);
+                border-radius:999px; overflow:hidden}
+  .row-prob .bar > span{position:absolute; inset:0 auto 0 0; width:0%;
+                       background:linear-gradient(90deg, var(--accent), #ff7d85)}
+  .row-prob .val{width:64px; text-align:right; font-variant-numeric:tabular-nums}
+</style>
+
+<header>
+  <div class="container">
+    <img src="./logo.png?v=1" alt="Логотип телефона">
+    <h1>
+      <span class="main-title">Узнай телефон</span>
+      <small>Модель телефона</small>
+    </h1>
+  </div>
+</header>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- Левая колонка -->
+    <div class="card">
+      <h3>Ввод</h3>
+      <div class="controls">
+        <button id="btn" class="btn camera">Запустить камеру</button>
+        <label class="btn secondary" for="file">Выбрать файл</label>
+        <input id="file" type="file" accept="image/*" style="display:none">
+      </div>
+
+      <div id="cam"></div>
+      <img id="preview" alt="Предпросмотр изображения" style="display:none">
+
+      <!-- Порог уверенности в отдельной карточке -->
+      <div class="hint-box">
+        <div class="row">
+          <span class="label">Порог уверенности:</span>
+          <input id="th" type="range" min="0.30" max="0.95" step="0.01" value="0.65">
+          <b id="thVal">0.65</b>
+        </div>
+        <small>Если условия не выполняются — итогом будет <b>«Другое»</b>.</small>
+      </div>
+    </div>
+
+    <!-- Правая колонка -->
+    <div class="card">
+      <h3>Результаты</h3>
+      <div id="status" class="muted">Загружаю модель…</div>
+
+      <div class="verdict" id="verdict" style="display:none"></div>
+      <div id="probs"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ==== параметры безопасности ==== */
+let THRESHOLD = 0.65;          // Порог уверенности (меняется слайдером)
+const MARGIN_MIN = 0.10;       // Минимальный разрыв Top1–Top2 (в долях)
+const ENTROPY_MAX = 1.2;       // Максимальная энтропия для уверенного ответа
+
+document.getElementById('thVal').textContent = THRESHOLD.toFixed(2);
+document.getElementById('th').addEventListener('input', e => {
+  THRESHOLD = Number(e.target.value);
+  document.getElementById('thVal').textContent = THRESHOLD.toFixed(2);
+});
+
+/* ==== элементы ==== */
+const btn = document.getElementById('btn');
+const file = document.getElementById('file');
+const camWrap = document.getElementById('cam');
+const preview = document.getElementById('preview');
+const statusEl = document.getElementById('status');
+const verdictEl = document.getElementById('verdict');
+const probsEl = document.getElementById('probs');
+
+/* ==== модель/камера ==== */
+let model, webcam, raf;
+const v = 'v=1'; // анти-кэш для обновления модели
+
+(async () => {
+  try {
+    model = await tmImage.load(`model.json?${v}`, `metadata.json?${v}`);
+    statusEl.textContent = 'Модель загружена. Выберите файл или запустите камеру.';
+  } catch (e) {
+    statusEl.textContent = 'Ошибка загрузки модели (см. Console).';
+    console.error('LOAD ERROR:', e);
+  }
+})();
+
+/* Полоски вероятностей */
+function renderBars(preds) {
+  probsEl.innerHTML = '';
+  preds.forEach(p => {
+    const row = document.createElement('div'); row.className = 'row-prob';
+    const label = document.createElement('div'); label.className = 'label'; label.textContent = p.className;
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const span = document.createElement('span'); span.style.width = `${(p.probability*100).toFixed(1)}%`;
+    bar.appendChild(span);
+    const val = document.createElement('div'); val.className = 'val';
+    val.textContent = `${(p.probability*100).toFixed(1)}%`;
+    row.append(label, bar, val);
+    probsEl.appendChild(row);
+  });
+}
+
+/* Итог: порог + разрыв + энтропия */
+function renderVerdict(preds) {
+  const sorted = [...preds].sort((a,b)=>b.probability-a.probability);
+  const top1 = sorted[0];
+  const top2 = sorted[1] || { probability: 0 };
+
+  const belowThreshold = top1.probability < THRESHOLD;
+  const margin = top1.probability - top2.probability;
+  const smallMargin = margin < 0.10;
+
+  let H = 0;
+  for (const p of preds) if (p.probability>0) H += -p.probability*Math.log(p.probability);
+  const highEntropy = H > ENTROPY_MAX;
+
+  verdictEl.style.display = 'block';
+
+  if (belowThreshold || smallMargin || highEntropy) {
+    const reasons = [];
+    if (belowThreshold) reasons.push(`Top-1 ниже порога ${Math.round(THRESHOLD*100)}%`);
+    if (smallMargin)   reasons.push(`разрыв Top-1/Top-2 лишь ${(margin*100).toFixed(1)} п.п.`);
+    if (highEntropy)   reasons.push(`высокая энтропия ${H.toFixed(2)}`);
+
+    verdictEl.innerHTML = `Итог: <b class="other">Другое</b> <span class="muted">(${reasons.join(', ')})</span>`;
+  } else {
+    verdictEl.innerHTML =
+      `Итог: <b>${top1.className}</b> — ${(top1.probability*100).toFixed(1)}% <span class="muted">(разрыв с Top-2: ${(margin*100).toFixed(1)} п.п.)</span>`;
+  }
+}
+
+/* Предсказание по элементу (img/canvas) */
+async function predictOn(el) {
+  if (!model) return;
+  try {
+    const preds = await model.predict(el);
+    statusEl.textContent = '';
+    renderVerdict(preds);
+    renderBars(preds);
+  } catch (e) {
+    statusEl.textContent = 'Ошибка предсказания (см. Console).';
+    console.error('PREDICT ERROR:', e);
+  }
+}
+
+/* Файл */
+file.onchange = e => {
+  const f = e.target.files?.[0]; if (!f) return;
+  const url = URL.createObjectURL(f);
+
+  if (raf) cancelAnimationFrame(raf);
+  if (webcam) webcam.stop();
+
+  camWrap.innerHTML = '';
+  preview.style.display = 'block';
+  preview.src = url;
+
+  preview.onload = async () => { await predictOn(preview); URL.revokeObjectURL(url); };
+  preview.onerror = () => { statusEl.textContent = 'Не удалось прочитать файл.'; URL.revokeObjectURL(url); };
+};
+
+/* Камера */
+btn.onclick = async () => {
+  if (!model) return;
+  try {
+    if (raf) cancelAnimationFrame(raf);
+    if (webcam) webcam.stop();
+
+    preview.style.display = 'none';
+    webcam = new tmImage.Webcam(224,224,true);
+    await webcam.setup(); await webcam.play();
+    camWrap.innerHTML = ''; camWrap.appendChild(webcam.canvas);
+    loop();
+  } catch (e) {
+    statusEl.textContent = 'Камера недоступна: ' + e;
+    console.error(e);
+  }
+};
+
+async function loop() {
+  webcam.update();
+  await predictOn(webcam.canvas);
+  raf = requestAnimationFrame(loop);
+}
+
+addEventListener('beforeunload', () => {
+  if (raf) cancelAnimationFrame(raf);
+  if (webcam) webcam.stop();
+});
+</script>
