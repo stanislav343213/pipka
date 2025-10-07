@@ -192,7 +192,7 @@ const v = 'v=1'; // анти-кэш для обновления модели
 
 (async () => {
   try {
-    model = await tmImage.load(`model.json?${v}`, `metadata.json?${v}`);
+    model = await tmImage.load(`./model.json?${v}`, `./metadata.json?${v}`);
     statusEl.textContent = 'Модель загружена. Выберите файл или запустите камеру.';
   } catch (e) {
     statusEl.textContent = 'Ошибка загрузки модели (см. Console).';
@@ -303,4 +303,5 @@ addEventListener('beforeunload', () => {
   if (raf) cancelAnimationFrame(raf);
   if (webcam) webcam.stop();
 });
+
 </script>
